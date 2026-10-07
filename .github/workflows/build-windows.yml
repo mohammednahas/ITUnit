@@ -1,4 +1,4 @@
-name: Build Windows EXE
+name: Build StudentITCenter for Windows
 
 on:
   workflow_dispatch:
@@ -7,201 +7,105 @@ on:
       - main
 
 jobs:
-  build-windows:
+  build:
     runs-on: windows-latest
 
     steps:
 
-      # 1) Get project
       - name: Checkout
         uses: actions/checkout@v4
 
-
-      # 2) Install JDK
-      - name: Setup Java 23
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '23'
 
-
-      # 3) Download JavaFX Windows JMODs
-      - name: Download JavaFX JMODs
-        shell: powershell
-        run: |
-          Invoke-WebRequest `
-            -Uri "https://download2.gluonhq.com/openjfx/23.0.1/openjfx-23.0.1_windows-x64_bin-jmods.zip" `
-            -OutFile javafx-jmods.zip
-
-          Expand-Archive `
-            -Path javafx-jmods.zip `
-            -DestinationPath .
-
-          Rename-Item `
-            "javafx-jmods-23.0.1" `
-            "javafx-jmods"
-
-
-      # 4) Download JavaFX SDK
-      #    Needed only for compiling the application
-      - name: Download JavaFX SDK
+      - name: Download JavaFX Windows SDK
         shell: powershell
         run: |
           Invoke-WebRequest `
             -Uri "https://download2.gluonhq.com/openjfx/23.0.1/openjfx-23.0.1_windows-x64_bin-sdk.zip" `
-            -OutFile javafx-sdk.zip
+            -OutFile javafx.zip
 
-          Expand-Archive `
-            -Path javafx-sdk.zip `
-            -DestinationPath .
+          Expand-Archive javafx.zip .
 
           Rename-Item `
             "javafx-sdk-23.0.1" `
-            "javafx-sdk"
+            "javafx"
 
-
-      # 5) Compile
-      - name: Compile Application
+      - name: Compile
         shell: powershell
         run: |
 
-          Remove-Item `
-            -Recurse `
-            -Force `
-            out `
-            -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force out | Out-Null
 
-          New-Item `
-            -ItemType Directory `
-            -Force `
-            -Path out | Out-Null
-
-          $sources = Get-ChildItem `
-            -Path src `
-            -Filter *.java `
-            -Recurse |
+          $sources = Get-ChildItem src -Recurse -Filter *.java |
             ForEach-Object { $_.FullName }
 
           javac `
-            --module-path "javafx-sdk\lib" `
+            --module-path "javafx\lib" `
             --add-modules javafx.controls,javafx.fxml `
             -cp "lib\*" `
             -d out `
             $sources
 
-
-      # 6) Copy resources
-      - name: Copy Resources
+      - name: Copy resources
         shell: powershell
         run: |
 
-          Copy-Item `
-            "src\style.css" `
-            "out\style.css"
+          Copy-Item src\style.css out\style.css
 
-          if (Test-Path "src\sample\sample.fxml") {
-
-            New-Item `
-              -ItemType Directory `
-              -Force `
-              -Path "out\sample" | Out-Null
-
-            Copy-Item `
-              "src\sample\sample.fxml" `
-              "out\sample\sample.fxml"
+          if (Test-Path src\sample\sample.fxml) {
+            New-Item -ItemType Directory -Force out\sample | Out-Null
+            Copy-Item src\sample\sample.fxml out\sample\sample.fxml
           }
 
-
-      # 7) Create application JAR
-      - name: Create Application JAR
+      - name: Create JAR
         shell: powershell
         run: |
 
-          Remove-Item `
-            -Recurse `
-            -Force `
-            package `
-            -ErrorAction SilentlyContinue
-
-          New-Item `
-            -ItemType Directory `
-            -Force `
-            -Path package | Out-Null
+          New-Item -ItemType Directory -Force package | Out-Null
 
           jar --create `
             --file package\StudentITCenter.jar `
             --main-class sample.Main `
             -C out .
 
-
-      # 8) Copy Apache POI libraries
-      - name: Copy Dependencies
+      - name: Create Windows App Image
         shell: powershell
         run: |
 
-          Copy-Item `
-            lib\*.jar `
-            package\
+          New-Item -ItemType Directory -Force dist | Out-Null
 
-
-      # 9) Create Windows Java + JavaFX runtime
-      #    IMPORTANT:
-      #    We use JavaFX JMODS here.
-      - name: Create Runtime Image
-        shell: powershell
-        run: |
-
-          Remove-Item `
-            -Recurse `
-            -Force `
-            runtime `
-            -ErrorAction SilentlyContinue
-
-          jlink `
-            --module-path "$env:JAVA_HOME\jmods;javafx-jmods" `
+          jpackage `
+            --type app-image `
+            --name StudentITCenter `
+            --input package `
+            --main-jar StudentITCenter.jar `
+            --main-class sample.Main `
+            --module-path "javafx\lib" `
             --add-modules javafx.controls,javafx.fxml `
-            --strip-debug `
-            --no-header-files `
-            --no-man-pages `
-            --compress=2 `
-            --output runtime
+            --dest dist `
+            --app-version 1.0.0 `
+            --java-options "-Dprism.order=sw" `
+            --java-options "-Dprism.verbose=true"
 
-
-      # 10) Build Windows EXE
-      - name: Create Windows EXE
+      - name: Copy dependencies into application
         shell: powershell
         run: |
-
-          Remove-Item `
-            -Recurse `
-            -Force `
-            dist `
-            -ErrorAction SilentlyContinue
 
           New-Item `
             -ItemType Directory `
             -Force `
-            -Path dist | Out-Null
+            "dist\StudentITCenter\app\lib" | Out-Null
 
-          jpackage `
-            --type exe `
-            --name "StudentITCenter" `
-            --input package `
-            --main-jar StudentITCenter.jar `
-            --main-class sample.Main `
-            --runtime-image runtime `
-            --dest dist `
-            --app-version 1.0.0 `
-            --win-shortcut `
-            --win-menu `
-            --win-console `
-            --java-options "-cp $APPDIR/*" `
-            --java-options "-Dprism.order=sw"
+          Copy-Item `
+            lib\*.jar `
+            "dist\StudentITCenter\app\lib\"
 
-
-      # 11) Upload EXE
-      - name: Upload Windows EXE
+      - name: Upload Windows Application
         uses: actions/upload-artifact@v4
         with:
-          name: StudentITCenter-Windows
-          path: dist/*.exe
+          name: StudentITCenter-Windows-App
+          path: dist\StudentITCenter

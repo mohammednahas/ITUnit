@@ -7,37 +7,43 @@ on:
       - main
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
 
     steps:
 
+      # 1. Get the project
       - name: Checkout
         uses: actions/checkout@v4
 
+
+      # 2. Install Java 23
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '23'
 
-      - name: Download JavaFX Windows SDK
+
+      # 3. Download JavaFX Windows SDK
+      - name: Download JavaFX
         shell: powershell
         run: |
           Invoke-WebRequest `
             -Uri "https://download2.gluonhq.com/openjfx/23.0.1/openjfx-23.0.1_windows-x64_bin-sdk.zip" `
             -OutFile javafx.zip
 
-          Expand-Archive javafx.zip .
+          Expand-Archive javafx.zip -DestinationPath .
 
           Rename-Item `
             "javafx-sdk-23.0.1" `
             "javafx"
 
+
+      # 4. Compile the application
       - name: Compile
         shell: powershell
         run: |
-
           New-Item -ItemType Directory -Force out | Out-Null
 
           $sources = Get-ChildItem src -Recurse -Filter *.java |
@@ -50,10 +56,11 @@ jobs:
             -d out `
             $sources
 
+
+      # 5. Copy application resources
       - name: Copy resources
         shell: powershell
         run: |
-
           Copy-Item src\style.css out\style.css
 
           if (Test-Path src\sample\sample.fxml) {
@@ -61,10 +68,11 @@ jobs:
             Copy-Item src\sample\sample.fxml out\sample\sample.fxml
           }
 
+
+      # 6. Create application JAR
       - name: Create JAR
         shell: powershell
         run: |
-
           New-Item -ItemType Directory -Force package | Out-Null
 
           jar --create `
@@ -72,10 +80,20 @@ jobs:
             --main-class sample.Main `
             -C out .
 
-      - name: Create Windows App Image
+
+      # 7. Put Apache POI dependencies beside the JAR
+      - name: Prepare dependencies
         shell: powershell
         run: |
+          New-Item -ItemType Directory -Force package\lib | Out-Null
 
+          Copy-Item lib\*.jar package\lib\
+
+
+      # 8. Build Windows application image
+      - name: Create Windows Application
+        shell: powershell
+        run: |
           New-Item -ItemType Directory -Force dist | Out-Null
 
           jpackage `
@@ -88,22 +106,21 @@ jobs:
             --add-modules javafx.controls,javafx.fxml `
             --dest dist `
             --app-version 1.0.0 `
-            --java-options "-Dprism.order=sw" `
-            --java-options "-Dprism.verbose=true"
+            --java-options "-Dprism.order=sw"
 
-      - name: Copy dependencies into application
+
+      # 9. Verify generated package
+      - name: Inspect package
         shell: powershell
         run: |
+          Write-Host "===== APPLICATION ====="
+          Get-ChildItem dist\StudentITCenter\app -Recurse
 
-          New-Item `
-            -ItemType Directory `
-            -Force `
-            "dist\StudentITCenter\app\lib" | Out-Null
+          Write-Host "===== RUNTIME ====="
+          Get-ChildItem dist\StudentITCenter\runtime -Recurse -Depth 2
 
-          Copy-Item `
-            lib\*.jar `
-            "dist\StudentITCenter\app\lib\"
 
+      # 10. Upload Windows application
       - name: Upload Windows Application
         uses: actions/upload-artifact@v4
         with:

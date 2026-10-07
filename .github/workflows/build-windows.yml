@@ -12,12 +12,10 @@ jobs:
 
     steps:
 
-      # 1. Get the project
       - name: Checkout
         uses: actions/checkout@v4
 
 
-      # 2. Install Java 23
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -25,8 +23,7 @@ jobs:
           java-version: '23'
 
 
-      # 3. Download JavaFX Windows SDK
-      - name: Download JavaFX
+      - name: Download JavaFX SDK
         shell: powershell
         run: |
           Invoke-WebRequest `
@@ -40,7 +37,6 @@ jobs:
             "javafx"
 
 
-      # 4. Compile the application
       - name: Compile
         shell: powershell
         run: |
@@ -57,7 +53,6 @@ jobs:
             $sources
 
 
-      # 5. Copy application resources
       - name: Copy resources
         shell: powershell
         run: |
@@ -69,7 +64,6 @@ jobs:
           }
 
 
-      # 6. Create application JAR
       - name: Create JAR
         shell: powershell
         run: |
@@ -81,8 +75,7 @@ jobs:
             -C out .
 
 
-      # 7. Put Apache POI dependencies beside the JAR
-      - name: Prepare dependencies
+      - name: Prepare libraries
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force package\lib | Out-Null
@@ -90,10 +83,47 @@ jobs:
           Copy-Item lib\*.jar package\lib\
 
 
-      # 8. Build Windows application image
-      - name: Create Windows Application
+      # IMPORTANT:
+      # Build the Java runtime explicitly with jlink.
+      - name: Create Custom Java Runtime
         shell: powershell
         run: |
+          Remove-Item runtime -Recurse -Force -ErrorAction SilentlyContinue
+
+          jlink `
+            --module-path "$env:JAVA_HOME\jmods;javafx\jmods" `
+            --add-modules java.base,java.desktop,java.logging,java.prefs,java.xml,jdk.unsupported,javafx.base,javafx.graphics,javafx.controls,javafx.fxml `
+            --output runtime `
+            --strip-debug `
+            --no-header-files `
+            --no-man-pages `
+            --compress=2
+
+
+      # Verify the runtime BEFORE jpackage.
+      - name: Verify Runtime
+        shell: powershell
+        run: |
+          Write-Host "===== RUNTIME ====="
+          Get-ChildItem runtime
+
+          Write-Host "===== RUNTIME BIN ====="
+          Get-ChildItem runtime\bin
+
+          if (Test-Path runtime\bin\java.exe) {
+            Write-Host "java.exe FOUND"
+            runtime\bin\java.exe -version
+          }
+          else {
+            Write-Error "java.exe NOT FOUND"
+            exit 1
+          }
+
+
+      - name: Create Application Image
+        shell: powershell
+        run: |
+          Remove-Item dist -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force dist | Out-Null
 
           jpackage `
@@ -102,25 +132,29 @@ jobs:
             --input package `
             --main-jar StudentITCenter.jar `
             --main-class sample.Main `
-            --module-path "javafx\lib" `
-            --add-modules javafx.controls,javafx.fxml `
+            --runtime-image runtime `
             --dest dist `
             --app-version 1.0.0 `
             --java-options "-Dprism.order=sw"
 
 
-      # 9. Verify generated package
-      - name: Inspect package
+      - name: Inspect Final Application
         shell: powershell
         run: |
-          Write-Host "===== APPLICATION ====="
-          Get-ChildItem dist\StudentITCenter\app -Recurse
+          Write-Host "===== FINAL APP ====="
+          Get-ChildItem dist\StudentITCenter -Recurse -Depth 3
 
-          Write-Host "===== RUNTIME ====="
-          Get-ChildItem dist\StudentITCenter\runtime -Recurse -Depth 2
+          Write-Host "===== FINAL JAVA ====="
+
+          if (Test-Path dist\StudentITCenter\runtime\bin\java.exe) {
+            Write-Host "FINAL java.exe FOUND"
+          }
+          else {
+            Write-Error "FINAL java.exe NOT FOUND"
+            exit 1
+          }
 
 
-      # 10. Upload Windows application
       - name: Upload Windows Application
         uses: actions/upload-artifact@v4
         with:

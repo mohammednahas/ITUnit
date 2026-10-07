@@ -1,0 +1,96 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '23'
+
+      - name: Download JavaFX
+        shell: powershell
+        run: |
+          Invoke-WebRequest `
+            -Uri "https://download2.gluonhq.com/openjfx/23.0.1/openjfx-23.0.1_windows-x64_bin-sdk.zip" `
+            -OutFile "javafx.zip"
+
+          Expand-Archive -Path "javafx.zip" -DestinationPath "."
+          Rename-Item "javafx-sdk-23.0.1" "javafx"
+
+      - name: Compile
+        shell: powershell
+        run: |
+          Remove-Item -Recurse -Force out -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+
+          $sources = Get-ChildItem -Path src -Filter *.java -Recurse |
+                     ForEach-Object { $_.FullName }
+
+          javac `
+            --module-path "javafx\lib" `
+            --add-modules javafx.controls,javafx.fxml `
+            -cp "lib\*" `
+            -d out `
+            $sources
+
+      - name: Copy resources
+        shell: powershell
+        run: |
+          Copy-Item "src\style.css" "out\style.css"
+
+          if (Test-Path "src\sample\sample.fxml") {
+            New-Item -ItemType Directory -Force -Path "out\sample" | Out-Null
+            Copy-Item "src\sample\sample.fxml" "out\sample\sample.fxml"
+          }
+
+      - name: Create application JAR
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+
+          jar --create `
+            --file package\StudentITCenter.jar `
+            --main-class sample.Main `
+            -C out .
+
+      - name: Prepare dependencies
+        shell: powershell
+        run: |
+          Copy-Item lib\*.jar package\
+
+      - name: Create EXE
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+
+          jpackage `
+            --type exe `
+            --name "StudentITCenter" `
+            --input package `
+            --main-jar StudentITCenter.jar `
+            --main-class sample.Main `
+            --module-path "javafx\lib" `
+            --add-modules javafx.controls,javafx.fxml `
+            --dest dist `
+            --app-version 1.0.0 `
+            --win-shortcut `
+            --win-menu
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudentITCenter-Windows
+          path: dist/*.exe

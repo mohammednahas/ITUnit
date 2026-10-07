@@ -12,16 +12,10 @@ jobs:
 
     steps:
 
-      # --------------------------------------------------
-      # 1. Download source code
-      # --------------------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
 
-      # --------------------------------------------------
-      # 2. Install JDK 23
-      # --------------------------------------------------
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -29,13 +23,9 @@ jobs:
           java-version: '23'
 
 
-      # --------------------------------------------------
-      # 3. Download JavaFX Windows SDK
-      # --------------------------------------------------
       - name: Download JavaFX
         shell: powershell
         run: |
-
           Invoke-WebRequest `
             -Uri "https://download2.gluonhq.com/openjfx/23.0.1/openjfx-23.0.1_windows-x64_bin-sdk.zip" `
             -OutFile "javafx.zip"
@@ -49,13 +39,9 @@ jobs:
             "javafx"
 
 
-      # --------------------------------------------------
-      # 4. Compile Java application
-      # --------------------------------------------------
-      - name: Compile
+      - name: Compile Application
         shell: powershell
         run: |
-
           Remove-Item `
             -Recurse `
             -Force `
@@ -81,19 +67,14 @@ jobs:
             $sources
 
 
-      # --------------------------------------------------
-      # 5. Copy application resources
-      # --------------------------------------------------
-      - name: Copy resources
+      - name: Copy Resources
         shell: powershell
         run: |
-
           Copy-Item `
             "src\style.css" `
             "out\style.css"
 
           if (Test-Path "src\sample\sample.fxml") {
-
             New-Item `
               -ItemType Directory `
               -Force `
@@ -105,13 +86,9 @@ jobs:
           }
 
 
-      # --------------------------------------------------
-      # 6. Create application JAR
-      # --------------------------------------------------
-      - name: Create application JAR
+      - name: Create Application JAR
         shell: powershell
         run: |
-
           New-Item `
             -ItemType Directory `
             -Force `
@@ -123,25 +100,17 @@ jobs:
             -C out .
 
 
-      # --------------------------------------------------
-      # 7. Copy Apache POI dependencies
-      # --------------------------------------------------
-      - name: Copy dependencies
+      - name: Copy Apache POI Dependencies
         shell: powershell
         run: |
-
           Copy-Item `
             lib\*.jar `
             package\
 
 
-      # --------------------------------------------------
-      # 8. Create Java + JavaFX Runtime
-      # --------------------------------------------------
-      - name: Create Runtime
+      - name: Create JavaFX Runtime
         shell: powershell
         run: |
-
           Remove-Item `
             -Recurse `
             -Force `
@@ -158,13 +127,9 @@ jobs:
             --output runtime
 
 
-      # --------------------------------------------------
-      # 9. Create Windows EXE
-      # --------------------------------------------------
-      - name: Create EXE
+      - name: Create Windows EXE
         shell: powershell
         run: |
-
           New-Item `
             -ItemType Directory `
             -Force `
@@ -181,12 +146,10 @@ jobs:
             --app-version 1.0.0 `
             --win-shortcut `
             --win-menu `
-            --win-console
+            --win-console `
+            --java-options "-Dprism.order=sw"
 
 
-      # --------------------------------------------------
-      # 10. Upload EXE
-      # --------------------------------------------------
       - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:

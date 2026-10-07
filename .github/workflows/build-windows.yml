@@ -1,4 +1,4 @@
-- name: Download JavaFX SDK and JMODs
+name: Download JavaFX SDK and JMODs
   shell: powershell
   run: |
     # Download JavaFX SDK

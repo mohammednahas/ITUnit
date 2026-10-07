@@ -1,162 +1,33 @@
-name: Build StudentITCenter for Windows
+- name: Download JavaFX SDK and JMODs
+  shell: powershell
+  run: |
+    # Download JavaFX SDK
+    Invoke-WebRequest `
+      -Uri "https://download2.gluonhq.com/openjfx/23.0.1/openjfx-23.0.1_windows-x64_bin-sdk.zip" `
+      -OutFile javafx-sdk.zip
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+    Expand-Archive javafx-sdk.zip -DestinationPath .
 
-jobs:
-  build-windows:
-    runs-on: windows-latest
-
-    steps:
-
-      - name: Checkout
-        uses: actions/checkout@v4
+    Rename-Item `
+      "javafx-sdk-23.0.1" `
+      "javafx"
 
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '23'
+    # Download JavaFX JMODs
+    Invoke-WebRequest `
+      -Uri "https://download2.gluonhq.com/openjfx/23.0.1/openjfx-23.0.1_windows-x64_bin-jmods.zip" `
+      -OutFile javafx-jmods.zip
+
+    Expand-Archive javafx-jmods.zip -DestinationPath .
+
+    Rename-Item `
+      "javafx-jmods-23.0.1" `
+      "javafx-jmods"
 
 
-      - name: Download JavaFX SDK
-        shell: powershell
-        run: |
-          Invoke-WebRequest `
-            -Uri "https://download2.gluonhq.com/openjfx/23.0.1/openjfx-23.0.1_windows-x64_bin-sdk.zip" `
-            -OutFile javafx.zip
+    # Verify
+    Write-Host "===== JavaFX SDK ====="
+    Get-ChildItem javafx\lib
 
-          Expand-Archive javafx.zip -DestinationPath .
-
-          Rename-Item `
-            "javafx-sdk-23.0.1" `
-            "javafx"
-
-
-      - name: Compile
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force out | Out-Null
-
-          $sources = Get-ChildItem src -Recurse -Filter *.java |
-            ForEach-Object { $_.FullName }
-
-          javac `
-            --module-path "javafx\lib" `
-            --add-modules javafx.controls,javafx.fxml `
-            -cp "lib\*" `
-            -d out `
-            $sources
-
-
-      - name: Copy resources
-        shell: powershell
-        run: |
-          Copy-Item src\style.css out\style.css
-
-          if (Test-Path src\sample\sample.fxml) {
-            New-Item -ItemType Directory -Force out\sample | Out-Null
-            Copy-Item src\sample\sample.fxml out\sample\sample.fxml
-          }
-
-
-      - name: Create JAR
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force package | Out-Null
-
-          jar --create `
-            --file package\StudentITCenter.jar `
-            --main-class sample.Main `
-            -C out .
-
-
-      - name: Prepare libraries
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force package\lib | Out-Null
-
-          Copy-Item lib\*.jar package\lib\
-
-
-      # IMPORTANT:
-      # Build the Java runtime explicitly with jlink.
-      - name: Create Custom Java Runtime
-        shell: powershell
-        run: |
-          Remove-Item runtime -Recurse -Force -ErrorAction SilentlyContinue
-
-          jlink `
-            --module-path "$env:JAVA_HOME\jmods;javafx\jmods" `
-            --add-modules java.base,java.desktop,java.logging,java.prefs,java.xml,jdk.unsupported,javafx.base,javafx.graphics,javafx.controls,javafx.fxml `
-            --output runtime `
-            --strip-debug `
-            --no-header-files `
-            --no-man-pages `
-            --compress=2
-
-
-      # Verify the runtime BEFORE jpackage.
-      - name: Verify Runtime
-        shell: powershell
-        run: |
-          Write-Host "===== RUNTIME ====="
-          Get-ChildItem runtime
-
-          Write-Host "===== RUNTIME BIN ====="
-          Get-ChildItem runtime\bin
-
-          if (Test-Path runtime\bin\java.exe) {
-            Write-Host "java.exe FOUND"
-            runtime\bin\java.exe -version
-          }
-          else {
-            Write-Error "java.exe NOT FOUND"
-            exit 1
-          }
-
-
-      - name: Create Application Image
-        shell: powershell
-        run: |
-          Remove-Item dist -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force dist | Out-Null
-
-          jpackage `
-            --type app-image `
-            --name StudentITCenter `
-            --input package `
-            --main-jar StudentITCenter.jar `
-            --main-class sample.Main `
-            --runtime-image runtime `
-            --dest dist `
-            --app-version 1.0.0 `
-            --java-options "-Dprism.order=sw"
-
-
-      - name: Inspect Final Application
-        shell: powershell
-        run: |
-          Write-Host "===== FINAL APP ====="
-          Get-ChildItem dist\StudentITCenter -Recurse -Depth 3
-
-          Write-Host "===== FINAL JAVA ====="
-
-          if (Test-Path dist\StudentITCenter\runtime\bin\java.exe) {
-            Write-Host "FINAL java.exe FOUND"
-          }
-          else {
-            Write-Error "FINAL java.exe NOT FOUND"
-            exit 1
-          }
-
-
-      - name: Upload Windows Application
-        uses: actions/upload-artifact@v4
-        with:
-          name: StudentITCenter-Windows-App
-          path: dist\StudentITCenter
+    Write-Host "===== JavaFX JMODS ====="
+    Get-ChildItem javafx-jmods

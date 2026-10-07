@@ -27,17 +27,33 @@ jobs:
             -Uri "https://download2.gluonhq.com/openjfx/23.0.1/openjfx-23.0.1_windows-x64_bin-sdk.zip" `
             -OutFile "javafx.zip"
 
-          Expand-Archive -Path "javafx.zip" -DestinationPath "."
-          Rename-Item "javafx-sdk-23.0.1" "javafx"
+          Expand-Archive `
+            -Path "javafx.zip" `
+            -DestinationPath "."
+
+          Rename-Item `
+            "javafx-sdk-23.0.1" `
+            "javafx"
 
       - name: Compile
         shell: powershell
         run: |
-          Remove-Item -Recurse -Force out -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Remove-Item `
+            -Recurse `
+            -Force `
+            out `
+            -ErrorAction SilentlyContinue
 
-          $sources = Get-ChildItem -Path src -Filter *.java -Recurse |
-                     ForEach-Object { $_.FullName }
+          New-Item `
+            -ItemType Directory `
+            -Force `
+            -Path out | Out-Null
+
+          $sources = Get-ChildItem `
+            -Path src `
+            -Filter *.java `
+            -Recurse |
+            ForEach-Object { $_.FullName }
 
           javac `
             --module-path "javafx\lib" `
@@ -49,17 +65,28 @@ jobs:
       - name: Copy resources
         shell: powershell
         run: |
-          Copy-Item "src\style.css" "out\style.css"
+          Copy-Item `
+            "src\style.css" `
+            "out\style.css"
 
           if (Test-Path "src\sample\sample.fxml") {
-            New-Item -ItemType Directory -Force -Path "out\sample" | Out-Null
-            Copy-Item "src\sample\sample.fxml" "out\sample\sample.fxml"
+            New-Item `
+              -ItemType Directory `
+              -Force `
+              -Path "out\sample" | Out-Null
+
+            Copy-Item `
+              "src\sample\sample.fxml" `
+              "out\sample\sample.fxml"
           }
 
       - name: Create application JAR
         shell: powershell
         run: |
-          New-Item -ItemType Directory -Force -Path package | Out-Null
+          New-Item `
+            -ItemType Directory `
+            -Force `
+            -Path package | Out-Null
 
           jar --create `
             --file package\StudentITCenter.jar `
@@ -69,12 +96,17 @@ jobs:
       - name: Prepare dependencies
         shell: powershell
         run: |
-          Copy-Item lib\*.jar package\
+          Copy-Item `
+            lib\*.jar `
+            package\
 
       - name: Create EXE
         shell: powershell
         run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          New-Item `
+            -ItemType Directory `
+            -Force `
+            -Path dist | Out-Null
 
           jpackage `
             --type exe `
@@ -87,7 +119,8 @@ jobs:
             --dest dist `
             --app-version 1.0.0 `
             --win-shortcut `
-            --win-menu
+            --win-menu `
+            --win-console
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
